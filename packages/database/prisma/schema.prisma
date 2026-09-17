@@ -1,0 +1,213 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProducerStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum PlatformRole {
+  REVIEWER
+  OPERATIONS_ADMIN
+  SUPER_ADMIN
+}
+
+enum ProducerRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Producer {
+  id          String               @id @default(uuid())
+  companyName String
+  cacNumber   String?              @unique
+  products    Product[]
+  memberships ProducerMembership[]
+  status      ProducerStatus       @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ProductStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+model Product {
+  id           String        @id @default(uuid())
+  producerId   String
+  name         String
+  brand        String
+  category     String?
+  size         String?
+  barcode      String?
+  nafdacNumber String?
+  imageUrl     String?
+  batches      Batch[]
+  status       ProductStatus @default(ACTIVE)
+
+  producer Producer @relation(fields: [producerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([producerId])
+}
+
+enum BatchStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+model Batch {
+  id             String      @id @default(uuid())
+  productId      String
+  batchNumber    String
+  manufacturedAt DateTime
+  expiresAt      DateTime
+  quantity       Int
+  status         BatchStatus @default(DRAFT)
+
+  product           Product            @relation(fields: [productId], references: [id])
+  verificationCodes VerificationCode[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, batchNumber])
+  @@index([productId])
+}
+
+enum VerificationCodeStatus {
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model VerificationCode {
+  id             String                 @id @default(uuid())
+  batchId        String
+  token          String                 @unique
+  status         VerificationCodeStatus @default(ACTIVE)
+  firstScannedAt DateTime?
+  scanCount      Int                    @default(0)
+  verificationEvents VerificationEvent[]
+
+  batch   Batch                     @relation(fields: [batchId], references: [id])
+  reports SuspiciousProductReport[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([batchId])
+}
+
+model User {
+  id            String        @id @default(uuid())
+  name          String
+  email         String        @unique
+  passwordHash  String
+  emailVerified Boolean       @default(false)
+  status        UserStatus    @default(ACTIVE)
+  platformRole  PlatformRole?
+
+  producerMemberships ProducerMembership[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProducerMembership {
+  id         String       @id @default(uuid())
+  userId     String
+  producerId String
+  role       ProducerRole @default(MEMBER)
+
+  user     User     @relation(fields: [userId], references: [id])
+  producer Producer @relation(fields: [producerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, producerId])
+  @@index([producerId])
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportReason {
+  PACKAGING_ISSUE
+  PRODUCT_QUALITY
+  CODE_REUSED
+  DETAILS_MISMATCH
+  OTHER
+}
+
+model SuspiciousProductReport {
+  id                 String       @id @default(uuid())
+  verificationCodeId String?
+  token              String?
+  reason             ReportReason
+  description        String?
+  status             ReportStatus @default(OPEN)
+
+  verificationCode VerificationCode? @relation(fields: [verificationCodeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([verificationCodeId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum VerificationEventResult {
+  VERIFIED
+  PREVIOUSLY_VERIFIED
+  UNKNOWN
+  SUSPICIOUS
+}
+
+model VerificationEvent {
+  id                 String                  @id @default(uuid())
+  verificationCodeId String?
+  token              String?
+  result             VerificationEventResult
+  createdAt          DateTime                @default(now())
+
+  verificationCode VerificationCode? @relation(fields: [verificationCodeId], references: [id])
+
+  @@index([verificationCodeId])
+  @@index([result])
+  @@index([createdAt])
+}
