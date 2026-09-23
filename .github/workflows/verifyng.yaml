@@ -42,7 +42,7 @@ jobs:
         working-directory: packages/database
         run: pnpm exec prisma validate --config=prisma7.config.ts
 
-      - name: Generate Prisma client
+      - name: Generate Prisma-client
         working-directory: packages/database
         run: pnpm exec prisma generate --config=prisma7.config.ts
 
