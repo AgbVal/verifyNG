@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { HomeVerification } from '@/components/home-verification';
 import { SiteHeader } from '@/components/site-header';
 
@@ -21,7 +22,9 @@ export default function Home() {
       {/* Verification Hero */}
       <section className="relative z-10 mx-auto flex min-h-[calc(100vh-80px)] max-w-[1180px] items-center px-6 pb-20">
         <div className="w-full">
-          <HomeVerification />
+          <Suspense fallback={null}>
+            <HomeVerification />
+          </Suspense>
         </div>
       </section>
     </main>

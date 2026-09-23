@@ -1,0 +1,259 @@
+name: VerifyNG CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------
+  # DATABASE / PRISMA
+  # -------------------------------------------------------
+  database:
+    name: Database
+    runs-on: ubuntu-latest
+
+    env:
+      # Dummy CI value.
+      # We are not connecting to a real database in this job yet.
+      DATABASE_URL: postgresql://verifyng:verifyng@localhost:5432/verifyng
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate Prisma schema
+        working-directory: packages/database
+        run: pnpm exec prisma validate --config=prisma7.config.ts
+
+      - name: Generate Prisma client
+        working-directory: packages/database
+        run: pnpm exec prisma generate --config=prisma7.config.ts
+
+      - name: Typecheck database package
+        run: pnpm --filter @verifyng/database typecheck
+
+      - name: Build database package
+        run: pnpm --filter @verifyng/database build
+
+
+  # -------------------------------------------------------
+  # API
+  # -------------------------------------------------------
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    needs: database
+
+    env:
+      DATABASE_URL: postgresql://verifyng:verifyng@localhost:5432/verifyng
+      JWT_SECRET: ci-only-not-a-production-secret
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The API depends on @verifyng/database, so regenerate/build it
+      # on this runner before validating the API.
+      - name: Generate Prisma client
+        working-directory: packages/database
+        run: pnpm exec prisma generate --config=prisma7.config.ts
+
+      - name: Build database package
+        run: pnpm --filter @verifyng/database build
+
+      - name: Lint API
+        run: pnpm --filter api lint
+
+      - name: Typecheck API
+        run: pnpm --filter api typecheck
+
+      - name: Test API
+        run: pnpm --filter api test
+
+      - name: Build API
+        run: pnpm --filter api build
+
+
+  # -------------------------------------------------------
+  # WORKER
+  # -------------------------------------------------------
+  worker:
+    name: Worker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Worker
+        run: pnpm --filter worker lint
+
+      - name: Typecheck Worker
+        run: pnpm --filter worker typecheck
+
+      - name: Test Worker
+        run: pnpm --filter worker test
+
+      - name: Build Worker
+        run: pnpm --filter worker build
+
+
+  # -------------------------------------------------------
+  # NEXT.JS WEB
+  # -------------------------------------------------------
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Web
+        run: pnpm --filter web lint
+
+      - name: Typecheck Web
+        run: pnpm --filter web typecheck
+
+      - name: Build Web
+        run: pnpm --filter web build
+
+
+  # -------------------------------------------------------
+  # DOCKER BUILD + PUSH
+  # -------------------------------------------------------
+  docker:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+
+    needs:
+      - api
+      - worker
+      - web
+
+    # Important:
+    # PRs validate Docker elsewhere if desired, but we don't publish
+    # Docker images from pull_request events.
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ---------------------------------------------------
+      # API IMAGE
+      # ---------------------------------------------------
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-api:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-api:latest
+          cache-from: type=gha,scope=verifyng-api
+          cache-to: type=gha,mode=max,scope=verifyng-api
+
+      # ---------------------------------------------------
+      # WORKER IMAGE
+      # ---------------------------------------------------
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/worker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-worker:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-worker:latest
+          cache-from: type=gha,scope=verifyng-worker
+          cache-to: type=gha,mode=max,scope=verifyng-worker
+
+      # ---------------------------------------------------
+      # WEB IMAGE
+      # ---------------------------------------------------
+      - name: Build and push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-web:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/verifyng-web:latest
+          cache-from: type=gha,scope=verifyng-web
+          cache-to: type=gha,mode=max,scope=verifyng-web

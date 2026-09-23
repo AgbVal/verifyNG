@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { getApiUrl } from '@/lib/api';
@@ -25,7 +25,7 @@ interface LoginResponse {
   role: string | null;
 }
 
-export default function SignInPage() {
+function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -90,7 +90,6 @@ export default function SignInPage() {
       setIsSubmitting(false);
     }
   }
-
   return (
     <main className="min-h-screen bg-white text-[#101828]">
       <header className="border-b border-[#e4e7ec]">
@@ -230,5 +229,12 @@ export default function SignInPage() {
         </section>
       </div>
     </main>
+  );
+}
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInContent />
+    </Suspense>
   );
 }
