@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifyng
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: verifyng-api-pod
+  template:
+    metadata:
+      labels:
+        app: verifyng-api-pod
+    spec:
+      restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: storage
+                    operator: In
+                    values:
+                      - ssd
+                  - key: env
+                    operator: In
+                    values:
+                      - prod
+
+      tolerations:
+        - key: "storage"
+          operator: "Equal"
+          value: "ssd"
+          effect: "NoExecute"
+      containers:
+      - name: api-pod
+        image: agbat/verifyng-api:57df7969c09fb278bb68e39632f804e526aed083
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "1"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 3001
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: postgres-secret
+                key: DATABASE_URL
+          - name: JWT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: postgres-secret
+                key: JWT_SECRET
+
+          - name: CORS_ORIGIN
+            valueFrom:
+              configMapKeyRef:
+                name: api-config
+                key: CORS_ORIGIN
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+spec:
+  selector:
+    app: verifyng-api-pod
+  ports:
+  - port: 3001
+    targetPort: 3001

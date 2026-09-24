@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: verifyng-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: verifyng-web-pod
+  template:
+    metadata:
+      labels:
+        app: verifyng-web-pod
+    spec:
+      restartPolicy: Always
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: storage
+                    operator: In
+                    values:
+                      - ssd
+                  - key: prod
+                    operator: In
+                    values:
+                      - env
+
+      tolerations:
+        - key: "storage"
+          operator: "Equal"
+          value: "ssd"
+          effect: "NoExecute"
+      containers:
+      - name: web-pod
+        image: agbat/verifyng-web:57df7969c09fb278bb68e39632f804e526aed083
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "1"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+        ports:
+        - containerPort: 3000
+        imagePullPolicy: IfNotPresent
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+spec:
+  selector:
+    app: verifyng-web-pod
+  type: NodePort
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30080

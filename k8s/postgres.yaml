@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mystatefulset
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  serviceName: postgres-service
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: storage
+                    operator: In
+                    values:
+                      - ssd
+                  - key: env
+                    operator: In
+                    values:
+                      - prod
+
+      tolerations:
+        - key: "storage"
+          operator: "Equal"
+          value: "ssd"
+          effect: "NoExecute"
+      volumes:
+        - name: verifyng-storage
+          persistentVolumeClaim:
+            claimName: verifyng-pvc
+      containers:
+      - name: postgres
+        image: postgres:17
+        ports:
+        - containerPort: 5432
+          name: postgres-con
+        volumeMounts:
+        - name: verifyng-storage
+          mountPath: /var/lib/postgresql/data
+        env:
+          - name: POSTGRES_USER
+            valueFrom:
+              secretKeyRef:
+                name: postgres-secret
+                key: POSTGRES_USER
+
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-secret
+                key: POSTGRES_PASSWORD
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+
