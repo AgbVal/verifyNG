@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: verifyng-db-migrate
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: storage
+                    operator: In
+                    values:
+                      - ssd
+                  - key: env
+                    operator: In
+                    values:
+                      - prod
+
+      tolerations:
+        - key: "storage"
+          operator: "Equal"
+          value: "ssd"
+          effect: "NoExecute"
+      containers:
+        - name: migrate
+          image: agbat/verifyng-migrate:test
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DATABASE_URL
+
+      restartPolicy: Never
+
+  backoffLimit: 3

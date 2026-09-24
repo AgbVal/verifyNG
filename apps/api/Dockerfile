@@ -3,6 +3,10 @@ FROM node:24-slim AS builder
 
 WORKDIR /app
 
+RUN apt-get update -y \
+    && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -19,8 +23,14 @@ RUN pnpm --filter @verifyng/database build
 
 RUN pnpm --filter api build
 
+# Stage 2: Database migration
+FROM builder AS migration
 
-# Stage 2: Production runtime
+WORKDIR /app
+
+CMD ["pnpm", "--filter", "@verifyng/database", "exec", "prisma", "migrate", "deploy", "--config=prisma7.config.ts"]
+
+# Stage 3: Production runtime
 FROM node:24-slim AS runtime
 
 WORKDIR /app

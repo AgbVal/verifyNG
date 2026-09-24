@@ -34,7 +34,7 @@ spec:
           effect: "NoExecute"
       containers:
       - name: api-pod
-        image: agbat/verifyng-api:57df7969c09fb278bb68e39632f804e526aed083
+        image: agbat/verifyng-api:c9f96f52f0c05733878c2dbdb24dc806123c02c1
         resources:
           requests:
             memory: "500Mi"
